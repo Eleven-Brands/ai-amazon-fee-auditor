@@ -10,6 +10,10 @@ import pandas as pd
 import pytest
 from unittest.mock import patch, MagicMock
 
+import datetime
+
+from pydantic import ValidationError
+
 from explore_fees import (
     run_dax,
     process_pbi_rows,
@@ -18,6 +22,7 @@ from explore_fees import (
     get_currency_for_country,
     build_output_df,
     iso_to_week_start,
+    validate_output_df,
 )
 
 
@@ -281,3 +286,37 @@ def test_week_start_is_monday():
         pytest.fail(
             f"iso_to_week_start(2025, 53) must not raise an exception, got: {exc}"
         )
+
+
+# ---------------------------------------------------------------------------
+# DATA-01 / T-04-02: Pydantic schema guard — validate_output_df
+# ---------------------------------------------------------------------------
+
+
+def test_validate_output_df_raises_on_missing_column():
+    """
+    validate_output_df() must raise pydantic.ValidationError when a required D-11
+    column is missing from the output DataFrame.
+
+    Verifies T-04-02 mitigation: Pydantic validation halts execution before CSV
+    write when the schema is wrong, preventing silently corrupt output files.
+
+    Test method: build a minimal D-11-compliant DataFrame, drop 'asin', then call
+    validate_output_df() — must raise ValidationError (not KeyError or silent pass).
+    """
+    df = pd.DataFrame({
+        "key_sales_marketplace_sku": ["US | US-OHFB-001"],
+        "country": ["US"],
+        "sales_region": ["US"],
+        "sku": ["US-OHFB-001"],
+        "asin": ["B0EXAMPLE01"],
+        "week_start_date": [datetime.date(2026, 1, 5)],
+        "avg_fee_per_unit": [1.50],
+        "currency": ["USD"],
+    })
+
+    # Drop 'asin' to simulate a missing required D-11 column
+    df = df.drop(columns=["asin"])
+
+    with pytest.raises(ValidationError):
+        validate_output_df(df)

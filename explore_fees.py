@@ -4,11 +4,16 @@ Queries Power BI for 16 weeks of fee data and writes a CSV.
 Extended by Phase 2 into run_audit.py.
 """
 
+import datetime
 import os
+import pathlib
+from typing import Optional
 
 import msal
 import pandas as pd
 import requests
+from dotenv import load_dotenv
+from pydantic import BaseModel
 
 # ---------------------------------------------------------------------------
 # Module-level constants (D-07, D-08, D-09)
@@ -30,6 +35,121 @@ COUNTRY_CURRENCY = {
     "ES": "EUR",
     "IT": "EUR",
 }
+
+# ---------------------------------------------------------------------------
+# DAX query constants (RESEARCH.md Pattern 3, Pattern 5)
+# ---------------------------------------------------------------------------
+
+SKU_QUERY = """EVALUATE
+SUMMARIZECOLUMNS(
+    'SKUs'[Key Column: Country | SKU],
+    'SKUs'[SKU],
+    'SKUs'[ASIN],
+    'SKUs'[Sales Region]
+)"""
+
+
+def build_fee_dax(cutoff_start: str, today: str) -> str:
+    """Build the 16-week FBA fee weekly aggregation DAX query with date range filter.
+
+    Uses FILTER(ALL('fact_fee_preview'), ...) with is_latest = 1 to exclude stale
+    fee schedule rows. Without is_latest filter, the aggregation mixes current and
+    historical fee preview rows producing inflated averages.
+
+    Args:
+        cutoff_start: ISO date string "YYYY-MM-DD" for the start of the 16-week window.
+        today: ISO date string "YYYY-MM-DD" for the end of the window (today).
+
+    Returns:
+        DAX query string ready for run_dax().
+
+    Note on column aliases (RESEARCH.md Pitfall 5 — DAX Column Name Mangling):
+        SUMMARIZECOLUMNS outputs "YEAR" and "WEEKNUM" as aliases. After bracket-stripping
+        in process_pbi_rows, these become "YEAR" and "WEEKNUM" which are then renamed to
+        "year" and "week_num" (snake_case) matching test fixture expectations.
+    """
+    start_date = datetime.date.fromisoformat(cutoff_start)
+    end_date = datetime.date.fromisoformat(today)
+    y_start, m_start, d_start = start_date.year, start_date.month, start_date.day
+    y_end, m_end, d_end = end_date.year, end_date.month, end_date.day
+
+    return f"""EVALUATE
+SUMMARIZECOLUMNS(
+    'fact_fee_preview'[key_sales_marketplace_sku],
+    YEAR('fact_fee_preview'[date_fee_preview]),
+    WEEKNUM('fact_fee_preview'[date_fee_preview], 21),
+    FILTER(
+        ALL('fact_fee_preview'),
+        'fact_fee_preview'[is_latest] = 1
+            && 'fact_fee_preview'[date_fee_preview] >= DATE({y_start},{m_start},{d_start})
+            && 'fact_fee_preview'[date_fee_preview] <= DATE({y_end},{m_end},{d_end})
+    ),
+    "avg_fee_per_unit", AVERAGE('fact_fee_preview'[expected_fulfillment_fee_per_unit])
+)
+ORDER BY
+    'fact_fee_preview'[key_sales_marketplace_sku],
+    [YEAR],
+    [WEEKNUM]"""
+
+
+# ---------------------------------------------------------------------------
+# Pydantic row schema (D-11, T-04-02)
+# ---------------------------------------------------------------------------
+
+class FeeRow(BaseModel):
+    """Pydantic v2 model for a single output row matching D-11 column schema.
+
+    Used by validate_output_df() to gate CSV writes — if required columns are
+    missing or wrong type, ValidationError is raised before any file is written
+    (T-04-02 mitigation).
+
+    Fields:
+        key_sales_marketplace_sku: Combined country + SKU key from fact_fee_preview.
+        country: 2-letter country code derived from key prefix.
+        sales_region: EU/US/CA/MX/UK from SKUs[Sales Region] — nullable for amzn.gr.* keys.
+        sku: SKU identifier — nullable for amzn.gr.* keys that don't join to SKUs.
+        asin: Amazon ASIN — nullable for amzn.gr.* keys.
+        week_start_date: Monday date of the ISO week.
+        avg_fee_per_unit: Weekly average of expected_fulfillment_fee_per_unit.
+        currency: ISO 4217 currency code derived from country prefix.
+    """
+    key_sales_marketplace_sku: str
+    country: str
+    sales_region: Optional[str]
+    sku: Optional[str]
+    asin: Optional[str]
+    week_start_date: datetime.date
+    avg_fee_per_unit: float
+    currency: str
+
+
+def validate_output_df(df: pd.DataFrame) -> None:
+    """Validate the output DataFrame schema against FeeRow before writing CSV.
+
+    Validates the first row of df as a FeeRow. Raises pydantic.ValidationError
+    if required columns are missing or wrong type. Skips validation if df is empty
+    (prints a warning instead).
+
+    This function enforces T-04-02: validation must run BEFORE to_csv() so that
+    a schema mismatch halts execution before any file is written.
+
+    Args:
+        df: The output DataFrame to validate.
+
+    Raises:
+        pydantic.ValidationError: if the first row fails FeeRow schema validation.
+    """
+    if df.empty:
+        print("WARNING: Output DataFrame is empty — skipping schema validation.")
+        return
+
+    # Convert first row to dict; replace NaN with None for Pydantic Optional fields
+    first_row = df.iloc[0].where(df.iloc[0].notna(), other=None).to_dict()
+    # week_start_date may be pd.Timestamp — convert to date for Pydantic
+    if hasattr(first_row.get("week_start_date"), "date"):
+        first_row["week_start_date"] = first_row["week_start_date"].date()
+    FeeRow(**first_row)
+    print(f"Schema validation: OK ({len(df)} rows)")
 
 
 # ---------------------------------------------------------------------------
@@ -322,3 +442,67 @@ def iso_to_week_start(iso_year: int, iso_week: int) -> pd.Timestamp:
 # key_sales_marketplace_sku, country, sku, asin, sales_region,
 # week_start_date, avg_fee_per_unit, baseline_median_fee_per_unit,
 # deviation_pct, direction, consecutive_weeks_flagged, run_date
+
+
+# ---------------------------------------------------------------------------
+# Main entrypoint (Wave 4 — Plan 01-04)
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    """Run the Phase 1 fee exploration: authenticate, query PBI, transform, validate, write CSV.
+
+    Step order:
+      1. Load .env credentials and acquire Power BI token.
+      2. Compute 16-week date window.
+      3. Guard against value count limit before querying.
+      4. Query FBA fee data via FEE_DAX.
+      5. Transform raw PBI rows into fee_df.
+      6. Query SKU dimension.
+      7. Join fee_df to SKU dimension to produce output_df (D-11 schema).
+      8. Validate output_df schema via FeeRow (T-04-02: before CSV write).
+      9. Print stdout summary (week range, row count, distinct keys).
+      10. Write output CSV to output/explore_fees_YYYYMMDD.csv.
+
+    Exits non-zero on auth failure (via get_token SystemExit) or validation error.
+    """
+    load_dotenv()
+    token = get_token()
+
+    today = datetime.date.today()
+    cutoff_start = today - datetime.timedelta(weeks=16)
+
+    # Defensive value count guard before executing the DAX query (T-02-03, Pitfall 1)
+    validate_value_count(5274, 16, 5)
+
+    print(f"Querying fee data: {cutoff_start} -> {today}")
+
+    # Step 1: Fetch weekly fee aggregation from Power BI
+    fee_rows = run_dax(build_fee_dax(str(cutoff_start), str(today)), token)
+    fee_df = process_pbi_rows(fee_rows)
+    print(f"Fee rows fetched: {len(fee_df)}")
+
+    # Step 2: Fetch SKU dimension (ASIN, SKU, Sales Region)
+    sku_rows = run_dax(SKU_QUERY, token)
+    print(f"SKU rows fetched: {len(sku_rows)}")
+
+    # Step 3: Join fee data to SKU dimension — logs unjoined count
+    output_df = build_output_df(fee_df, pd.DataFrame(sku_rows))
+
+    # Step 4: Validate schema before any CSV write (T-04-02 mitigation)
+    validate_output_df(output_df)
+
+    # Step 5: Print stdout summary
+    print(f"Weeks covered: {output_df['week_start_date'].min()} -> {output_df['week_start_date'].max()}")
+    print(f"Total rows: {len(output_df)}")
+    print(f"Distinct keys: {output_df['key_sales_marketplace_sku'].nunique()}")
+
+    # Step 6: Write output CSV to output/ directory
+    output_dir = pathlib.Path("output")
+    output_dir.mkdir(exist_ok=True)
+    output_path = output_dir / f"explore_fees_{today.strftime('%Y%m%d')}.csv"
+    output_df.to_csv(output_path, index=False)
+    print(f"CSV written: {output_path}")
+
+
+if __name__ == "__main__":
+    main()
