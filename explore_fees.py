@@ -230,9 +230,70 @@ def build_output_df(fee_df: pd.DataFrame, sku_df: pd.DataFrame) -> pd.DataFrame:
     Left-joins fee_df to sku_df on key_sales_marketplace_sku. amzn.gr.* keys that
     do not join have NaN for asin, sku, and sales_region — they are preserved, not dropped.
 
-    Implemented in Wave 3 (Plan 01-03).
+    Accepts either:
+      - Raw PBI-format DataFrames (bracket-qualified column names from executeQueries)
+      - Pre-cleaned DataFrames (already normalised column names from tests/fixtures)
+
+    D-11 output columns:
+      key_sales_marketplace_sku, country, sales_region, sku, asin,
+      week_start_date, avg_fee_per_unit, currency
     """
-    raise NotImplementedError("build_output_df is implemented in Wave 3 (Plan 01-03)")
+    # Step 1 — Strip PBI bracket qualification from sku_df column names (idempotent
+    # if already stripped: "sku" -> "sku", "SKUs[SKU]" -> "SKU").
+    sku_df = sku_df.copy()
+    sku_df.columns = [c.split("[")[-1].rstrip("]") for c in sku_df.columns]
+
+    # Rename PBI-format columns to canonical names when they exist.
+    # After bracket-stripping, PBI sku_df columns are:
+    #   "Key Column: Country | SKU", "SKU", "ASIN", "Sales Region"
+    # Test-fixture sku_df columns are already:
+    #   "key_sales_marketplace_sku", "sku", "asin", "sales_region"
+    sku_rename = {
+        "Key Column: Country | SKU": "key_sales_marketplace_sku",
+        "SKU": "sku",
+        "ASIN": "asin",
+        "Sales Region": "sales_region",
+    }
+    sku_df = sku_df.rename(columns={k: v for k, v in sku_rename.items() if k in sku_df.columns})
+
+    # Step 2 — Add country column to fee_df
+    fee_df = fee_df.copy()
+    extract_country(fee_df)
+
+    # Step 3 — Left-join: preserve all fee_df rows (including amzn.gr.*)
+    # T-03-02: how="left" ensures no rows dropped
+    merged = pd.merge(
+        fee_df,
+        sku_df[["key_sales_marketplace_sku", "sku", "asin", "sales_region"]],
+        on="key_sales_marketplace_sku",
+        how="left",
+    )
+
+    # Step 4 — Derive week_start_date if not already present (fee_df may be raw)
+    if "week_start_date" not in merged.columns:
+        merged["week_start_date"] = merged.apply(
+            lambda row: iso_to_week_start(row["year"], row["week_num"]), axis=1
+        )
+
+    # Step 5 — Add currency column derived from country (D-11, T-03-03)
+    merged["currency"] = merged["country"].map(COUNTRY_CURRENCY).fillna("UNKNOWN")
+
+    # Step 6 — Log unjoined count for VALIDATION.md manual verification
+    unjoined = merged["asin"].isna().sum()
+    print(f"Unjoined keys (amzn.gr.* or no SKU match): {unjoined}")
+
+    # Step 7 — Select and reorder to exact D-11 column list
+    d11_columns = [
+        "key_sales_marketplace_sku",
+        "country",
+        "sales_region",
+        "sku",
+        "asin",
+        "week_start_date",
+        "avg_fee_per_unit",
+        "currency",
+    ]
+    return merged[d11_columns]
 
 
 def iso_to_week_start(iso_year: int, iso_week: int) -> pd.Timestamp:
