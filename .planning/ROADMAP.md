@@ -28,8 +28,14 @@
   2. The exploratory output shows at minimum 4 weeks of history per SKU, confirming rolling median baseline is viable
   3. `$_total_fba_fee_fee_preview` dependency on `f.AllOrders[unit_fba_fee]` is validated — confirmed returning real values or flagged as unusable and replaced with `$_unit_fba_fee_fee_preview` × units
   4. An exploratory script documents observed fee variance distribution and recommends an initial % threshold range for Phase 2 calibration
-  5. BigQuery tables `fee_audit_runs` and `fee_anomalies` exist with correct schemas (empty, ready to receive data)
-**Plans**: TBD
+  5. BigQuery criterion superseded by D-17/D-18 (no BigQuery — local CSV state instead)
+**Plans**: 4 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Project scaffold: .gitignore, .env.example, requirements.txt, pytest.ini, 8-test unit suite
+- [ ] 01-02-PLAN.md — Walking skeleton + auth layer: skeleton.py, get_token(), run_dax(), validate_value_count()
+- [ ] 01-03-PLAN.md — Core aggregation: process_pbi_rows, iso_to_week_start, extract_country, get_currency_for_country, build_output_df
+- [ ] 01-04-PLAN.md — CSV output + main() entrypoint: FeeRow Pydantic model, DAX constants, full wiring
 
 ### Phase 2: Detection + Output Pipeline
 **Goal**: A single end-to-end audit run can be triggered locally, detects anomalies from real data, and posts a ClickUp comment with an AI-generated summary and a CSV attachment
@@ -61,7 +67,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Data Foundation | 0/? | Not started | - |
+| 1. Data Foundation | 0/4 | Not started | - |
 | 2. Detection + Output Pipeline | 0/? | Not started | - |
 | 3. Scheduling + Operationalization | 0/? | Not started | - |
 
@@ -88,4 +94,4 @@
 ---
 
 *Roadmap created: 2026-05-27*
-*Last updated: 2026-05-27 after initialization*
+*Last updated: 2026-05-27 — Phase 1 plans written (4 plans, 4 waves)*
