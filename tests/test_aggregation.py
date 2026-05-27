@@ -61,8 +61,8 @@ def test_run_dax_returns_expected_shape():
     mock_resp = MagicMock()
     mock_resp.status_code = 200
     mock_resp.json.return_value = mock_response_json
-    # Ensure soft-error key is absent (no API-level error)
-    mock_resp.json.return_value.get = lambda key, default=None: mock_response_json.get(key, default)
+    # Soft-error key is absent in mock_response_json (results[0] has no "error" key)
+    # No override needed — dict.get("error") returns None naturally
 
     with patch("requests.post", return_value=mock_resp):
         result = run_dax(
