@@ -49,47 +49,27 @@ SUMMARIZECOLUMNS(
 )"""
 
 
-def build_fee_dax(cutoff_start: str, today: str) -> str:
-    """Build the 16-week FBA fee weekly aggregation DAX query with date range filter.
+def build_fee_dax() -> str:
+    """Return the DAX query that fetches the current fee schedule snapshot (is_latest = 1).
 
-    Uses FILTER(ALL('fact_fee_preview'), ...) with is_latest = 1 to exclude stale
-    fee schedule rows. Without is_latest filter, the aggregation mixes current and
-    historical fee preview rows producing inflated averages.
+    Groups by (key_sales_marketplace_sku, date_fee_preview) — both are real table columns,
+    which is required for SUMMARIZECOLUMNS groupBy arguments. YEAR() and WEEKNUM() cannot
+    be used as groupBy expressions; they are derived in Python by process_pbi_rows() instead.
 
-    Args:
-        cutoff_start: ISO date string "YYYY-MM-DD" for the start of the 16-week window.
-        today: ISO date string "YYYY-MM-DD" for the end of the window (today).
+    Returns 5,274 rows (one per key) × 3 columns = ~15K values — well under the 1M limit.
 
-    Returns:
-        DAX query string ready for run_dax().
-
-    Note on column aliases (RESEARCH.md Pitfall 5 — DAX Column Name Mangling):
-        SUMMARIZECOLUMNS outputs "YEAR" and "WEEKNUM" as aliases. After bracket-stripping
-        in process_pbi_rows, these become "YEAR" and "WEEKNUM" which are then renamed to
-        "year" and "week_num" (snake_case) matching test fixture expectations.
+    Data model note: fact_fee_preview stores fee schedule history. is_latest = 1 marks the
+    current/active fee for each key. Historical rows (is_latest = 0) are available for Phase 2
+    anomaly detection by querying without the is_latest filter and batching by marketplace.
     """
-    start_date = datetime.date.fromisoformat(cutoff_start)
-    end_date = datetime.date.fromisoformat(today)
-    y_start, m_start, d_start = start_date.year, start_date.month, start_date.day
-    y_end, m_end, d_end = end_date.year, end_date.month, end_date.day
-
-    return f"""EVALUATE
+    return """EVALUATE
 SUMMARIZECOLUMNS(
     'fact_fee_preview'[key_sales_marketplace_sku],
-    YEAR('fact_fee_preview'[date_fee_preview]),
-    WEEKNUM('fact_fee_preview'[date_fee_preview], 21),
-    FILTER(
-        ALL('fact_fee_preview'),
-        'fact_fee_preview'[is_latest] = 1
-            && 'fact_fee_preview'[date_fee_preview] >= DATE({y_start},{m_start},{d_start})
-            && 'fact_fee_preview'[date_fee_preview] <= DATE({y_end},{m_end},{d_end})
-    ),
+    'fact_fee_preview'[date_fee_preview],
+    FILTER(ALL('fact_fee_preview'), 'fact_fee_preview'[is_latest] = 1),
     "avg_fee_per_unit", AVERAGE('fact_fee_preview'[expected_fulfillment_fee_per_unit])
 )
-ORDER BY
-    'fact_fee_preview'[key_sales_marketplace_sku],
-    [YEAR],
-    [WEEKNUM]"""
+ORDER BY 'fact_fee_preview'[key_sales_marketplace_sku]"""
 
 
 # ---------------------------------------------------------------------------
@@ -297,27 +277,30 @@ def process_pbi_rows(rows: list[dict]) -> pd.DataFrame:
     """Convert raw PBI API rows into a cleaned DataFrame.
 
     Renames PBI fully-qualified column names (e.g., "fact_fee_preview[col]")
-    to bare column names. Derives week_start_date from ISO year + week number.
+    to bare column names. Derives YEAR, WEEKNUM, and week_start_date from the
+    date_fee_preview column returned by the live API.
 
-    Column rename sequence:
+    Column processing sequence:
       1. Strip bracket qualification: "fact_fee_preview[key_sales_marketplace_sku]" -> "key_sales_marketplace_sku"
-      2. Normalise YEAR/WEEKNUM to lowercase snake_case for consistency with test fixtures
-      3. Cast year and week_num to int (PBI may return float)
-      4. Add week_start_date via iso_to_week_start
+      2. Parse date_fee_preview as datetime
+      3. Derive YEAR and WEEKNUM (ISO) from the date
+      4. Derive week_start_date (Monday) from the date via iso_to_week_start
+      5. Cast avg_fee_per_unit to float
     """
     df = pd.DataFrame(rows)
     # RESEARCH.md Pattern 4 — strip PBI column name qualifications FIRST
     df.columns = [c.split("[")[-1].rstrip("]") for c in df.columns]
-    # Normalise to snake_case expected by tests
-    df = df.rename(columns={"YEAR": "year", "WEEKNUM": "week_num"})
-    # Cast to int — PBI may return floats
-    df["year"] = df["year"].astype(int)
-    df["week_num"] = df["week_num"].astype(int)
+    # Parse date_fee_preview as datetime
+    df["date_fee_preview"] = pd.to_datetime(df["date_fee_preview"])
+    # Derive ISO year and week number from the date (replaces YEAR/WEEKNUM DAX aliases)
+    iso_cal = df["date_fee_preview"].dt.isocalendar()
+    df["YEAR"] = iso_cal.year.astype(int)
+    df["WEEKNUM"] = iso_cal.week.astype(int)
     # Ensure avg_fee_per_unit is float
     df["avg_fee_per_unit"] = df["avg_fee_per_unit"].astype(float)
     # Derive Monday date for each ISO year+week
     df["week_start_date"] = df.apply(
-        lambda row: iso_to_week_start(row["year"], row["week_num"]), axis=1
+        lambda row: iso_to_week_start(row["YEAR"], row["WEEKNUM"]), axis=1
     )
     return df
 
@@ -469,15 +452,14 @@ def main() -> None:
     token = get_token()
 
     today = datetime.date.today()
-    cutoff_start = today - datetime.timedelta(weeks=16)
 
-    # Defensive value count guard before executing the DAX query (T-02-03, Pitfall 1)
-    validate_value_count(5274, 16, 5)
+    # Defensive value count guard: is_latest=1 snapshot is 5,274 keys × 1 × 3 cols = 15,822 values
+    validate_value_count(5274, 1, 3)
 
-    print(f"Querying fee data: {cutoff_start} -> {today}")
+    print(f"Querying current fee schedule snapshot (is_latest=1): {today}")
 
-    # Step 1: Fetch weekly fee aggregation from Power BI
-    fee_rows = run_dax(build_fee_dax(str(cutoff_start), str(today)), token)
+    # Step 1: Fetch current fee schedule snapshot from Power BI
+    fee_rows = run_dax(build_fee_dax(), token)
     fee_df = process_pbi_rows(fee_rows)
     print(f"Fee rows fetched: {len(fee_df)}")
 

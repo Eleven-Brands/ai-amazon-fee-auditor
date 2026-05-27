@@ -82,13 +82,12 @@ def test_run_dax_returns_expected_shape():
 
 def test_weekly_avg_calculation(sample_pbi_rows):
     """
-    process_pbi_rows() must rename PBI columns, preserve numeric type, and return a DataFrame.
+    process_pbi_rows() must strip PBI column brackets, parse date_fee_preview,
+    derive YEAR/WEEKNUM via isocalendar, add week_start_date (Monday), and
+    preserve avg_fee_per_unit as float.
 
-    The DAX query already produces AVERAGE per week — this test validates column renaming
-    and numeric dtype, not re-aggregation logic.
-
-    Given two rows for "US | US-OHFB-001" (week 1: 1.50, week 2: 2.50),
-    the output DataFrame must have an avg_fee_per_unit column with float values.
+    Fixture has "2025-12-29T00:00:00" for US | US-OHFB-001 row 1 — this is
+    ISO 2026 week 1 (year boundary: week 1 of 2026 starts in December 2025).
     """
     df = process_pbi_rows(sample_pbi_rows)
 
@@ -97,13 +96,22 @@ def test_weekly_avg_calculation(sample_pbi_rows):
     assert pd.api.types.is_float_dtype(df["avg_fee_per_unit"]), (
         "avg_fee_per_unit must be float dtype"
     )
+    assert "week_start_date" in df.columns, "Column week_start_date must exist"
+    assert "YEAR" in df.columns, "Column YEAR must exist (derived from date_fee_preview)"
+    assert "WEEKNUM" in df.columns, "Column WEEKNUM must exist (derived from date_fee_preview)"
 
     us_rows = df[df["key_sales_marketplace_sku"] == "US | US-OHFB-001"]
-    assert len(us_rows) == 2, "Both week rows for US | US-OHFB-001 must be present"
+    assert len(us_rows) == 2, "Both date rows for US | US-OHFB-001 must be present"
 
-    week1_fee = us_rows[us_rows["week_num"] == 1]["avg_fee_per_unit"].iloc[0]
-    assert week1_fee == pytest.approx(1.50), (
-        "Week 1 avg_fee_per_unit for US | US-OHFB-001 must be 1.50"
+    # Row with 2025-12-29 is ISO 2026-W01 — verify YEAR/WEEKNUM derived correctly
+    row_w01 = us_rows[us_rows["WEEKNUM"] == 1].iloc[0]
+    assert row_w01["YEAR"] == 2026, "ISO year for 2025-12-29 must be 2026"
+    assert row_w01["avg_fee_per_unit"] == pytest.approx(2.00), (
+        "avg_fee_per_unit for row 1 must be 2.00"
+    )
+    # week_start_date for ISO 2026-W01 must be Monday 2025-12-29
+    assert str(row_w01["week_start_date"].date()) == "2025-12-29", (
+        "week_start_date for ISO 2026-W01 must be 2025-12-29 (Monday)"
     )
 
 
