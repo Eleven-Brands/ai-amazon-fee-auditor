@@ -1,7 +1,7 @@
 # Project State: AI Amazon Fee Auditor
 
 **Last updated:** 2026-05-27
-**Session:** Phase 1 planned — 4 plans in 4 waves
+**Session:** Phase 1 executing — Wave 1 complete, Wave 2 next
 
 ---
 
@@ -11,19 +11,19 @@
 
 **Current focus:** Phase 1 — Data Foundation
 
-**Repository:** AI Amazon Fee Auditor (master branch)
+**Repository:** AI Amazon Fee Auditor (gsd/phase-01-data-foundation branch)
 
 ---
 
 ## Current Position
 
 **Phase:** 1 — Data Foundation
-**Plan:** Ready to execute (4 plans, 4 waves)
-**Status:** Planned
+**Plan:** Wave 2 — Plan 01-02 (next to execute)
+**Status:** Executing
 
 ```
-Progress: [··········] 0%
-Phase 1: [P] Data Foundation  ← PLANNED — ready to execute
+Progress: [██········] 25%
+Phase 1: [►] Data Foundation  ← EXECUTING — Wave 2/4
 Phase 2: [ ] Detection + Output Pipeline
 Phase 3: [ ] Scheduling + Operationalization
 ```
@@ -37,7 +37,7 @@ Phase 3: [ ] Scheduling + Operationalization
 | Phases total | 3 |
 | Phases complete | 0 |
 | Plans total | 4 (Phase 1) |
-| Plans complete | 0 |
+| Plans complete | 1 |
 | Requirements mapped | 11/11 |
 
 ---
@@ -54,6 +54,8 @@ Phase 3: [ ] Scheduling + Operationalization
 | Claude is narrative layer only | All math in Python; Claude receives anomaly list, never raw rows; respects token budget |
 | n8n for scheduling | Cloud-hosted, retry logic, no local machine dependency |
 | Rolling 8-week median per SKU per Sales Region | Median is more robust to outliers than mean; per-unit normalization needed for volume-adjusted fairness |
+| output/* with !output/.gitkeep gitignore pattern | Tracks sentinel file to preserve output/ in git while ignoring all CSV contents |
+| 8 tests use natural ImportError RED state | No @pytest.mark.skip or xfail — enforces TDD discipline for Wave 2 implementation |
 
 ### Open Questions (Phase 1 Must Resolve)
 
@@ -90,11 +92,11 @@ Phase 3: [ ] Scheduling + Operationalization
 
 ### Last Session
 
-**What was accomplished:** Phase 1 planned. 4 PLAN.md files created across 4 waves. RESEARCH.md written (DAX patterns, MSAL auth, value count limits). VALIDATION.md written (9-test Nyquist map). SKELETON.md written (Walking Skeleton for data path verification). All 3 requirements (DATA-01, DATA-02, DETECT-01) covered. Plan checker passed (3 iterations, all blockers resolved).
+**What was accomplished:** Plan 01-01 executed. Project scaffold created (.gitignore, .env.example, requirements.txt, pytest.ini, output/.gitkeep). 8 unit tests written in RED state (ImportError) with conftest.py fixtures. All files committed atomically per task. T-01-01 (.env disclosure) mitigated and verified.
 
-**Stopping point:** Phase 1 plans verified and committed. STATE.md updated to Planned.
+**Stopping point:** Plan 01-01 complete. SUMMARY.md written. STATE.md and ROADMAP.md updated.
 
-**Next action:** `/clear` then `/gsd-execute-phase 1` — execute the Data Foundation phase.
+**Next action:** Execute Plan 01-02 (Wave 2) — implement `explore_fees.py` to turn all 8 tests GREEN.
 
 ---
 

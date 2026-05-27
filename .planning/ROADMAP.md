@@ -32,7 +32,7 @@
 **Plans**: 4 plans in 4 waves
 
 **Wave 1**
-- [ ] 01-01-PLAN.md — Project scaffold: .gitignore, .env.example, requirements.txt, pytest.ini, 9-test unit suite
+- [x] 01-01-PLAN.md — Project scaffold: .gitignore, .env.example, requirements.txt, pytest.ini, 9-test unit suite
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 01-02-PLAN.md — Walking skeleton + auth layer: skeleton.py, get_token(), run_dax(), validate_value_count()
@@ -78,7 +78,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Data Foundation | 0/4 | Not started | - |
+| 1. Data Foundation | 1/4 | In progress | 01-01: 2026-05-27 |
 | 2. Detection + Output Pipeline | 0/? | Not started | - |
 | 3. Scheduling + Operationalization | 0/? | Not started | - |
 
@@ -105,4 +105,4 @@
 ---
 
 *Roadmap created: 2026-05-27*
-*Last updated: 2026-05-27 — Phase 1 plans written (4 plans, 4 waves)*
+*Last updated: 2026-05-27 — Plan 01-01 complete (scaffold + 8-test RED harness)*
