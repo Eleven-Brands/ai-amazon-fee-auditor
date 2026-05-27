@@ -38,7 +38,7 @@
 - [x] 01-02-PLAN.md — Walking skeleton + auth layer: skeleton.py, get_token(), run_dax(), validate_value_count()
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 01-03-PLAN.md — Core aggregation: process_pbi_rows, iso_to_week_start, extract_country, get_currency_for_country, build_output_df
+- [x] 01-03-PLAN.md — Core aggregation: process_pbi_rows, iso_to_week_start, extract_country, get_currency_for_country, build_output_df
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 01-04-PLAN.md — CSV output + main() entrypoint: FeeRow Pydantic model, DAX constants, full wiring
@@ -78,7 +78,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Data Foundation | 2/4 | In progress | 01-01: 2026-05-27, 01-02: 2026-05-27 |
+| 1. Data Foundation | 3/4 | In progress | 01-01: 2026-05-27, 01-02: 2026-05-27, 01-03: 2026-05-27 |
 | 2. Detection + Output Pipeline | 0/? | Not started | - |
 | 3. Scheduling + Operationalization | 0/? | Not started | - |
 
@@ -105,4 +105,4 @@
 ---
 
 *Roadmap created: 2026-05-27*
-*Last updated: 2026-05-27 — Plan 01-02 complete (skeleton.py live + explore_fees.py auth layer, 2/8 tests GREEN, is_latest flag and currency column discovered)*
+*Last updated: 2026-05-27 — Plan 01-03 complete (all 5 aggregation stubs implemented, 8/8 tests GREEN, D-11 schema wired)*
