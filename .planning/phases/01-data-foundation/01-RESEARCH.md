@@ -18,7 +18,7 @@
 - D-05: Include all 5,274 distinct keys (including `amzn.gr.*` prefixed keys). Do not filter.
 - D-06: ASIN lookup via join `fact_fee_preview[key_sales_marketplace_sku]` → `SKUs[Key Column: Country | SKU]`. ASIN = `SKUs[ASIN]`. Sales Region = `SKUs[Sales Region]`. `amzn.gr.*` keys do NOT join — count and log, do not fail.
 - D-07: Workspace ID = `47144ee2-02f9-4408-9ed5-57acf6a9f44d`
-- D-08: Dataset ID = `a95798aa-a3ec-4a89-9816-63cde534cded`
+- D-08: Dataset ID = `a95798aa-a3ec-4a89-9816-63cde534cdd7`
 - D-09: Auth = MSAL device-code flow. Env vars `POWERBI_TENANT_ID` and `POWERBI_CLIENT_ID` already set. Token cached at `~/.claude/powerbi_token_cache.json`.
 - D-10: Deliverable = `explore_fees.py` + one exploration CSV. No Jupyter notebook.
 - D-11: CSV columns: `key_sales_marketplace_sku`, `country`, `sales_region`, `sku`, `asin` (null for unjoined), `week_start_date`, `avg_fee_per_unit`, `currency`.
@@ -74,7 +74,7 @@ The MSAL token cache pattern from the `powerbi-query` skill works as-is. `acquir
 | Authentication (MSAL token acquire/refresh) | Python script | — | Delegated auth flow runs locally; no server needed |
 | DAX query construction and pagination | Python script | Power BI DAX engine | Script builds the DAX string; PBI engine evaluates it |
 | Weekly aggregation (daily rows → weekly avg) | Power BI DAX engine | — | Must happen in DAX to avoid row limit violation; DAX WEEKNUM inside SUMMARIZECOLUMNS |
-| SKU/ASIN dimension join | Power BI DAX engine | — | Both tables are in the same PBI dataset; DAX RELATEDTABLE/LOOKUPVALUE is correct join mechanism |
+| SKU/ASIN dimension join | Python (pandas) | Power BI DAX engine (join available) | Two-query approach in Python: avoids value-count blowup; SUMMARIZECOLUMNS with joined SKUs adds 3+ columns pushing total values ~60% higher; Pattern 5 documents this decision |
 | Currency extraction per key | Power BI DAX engine | — | Currency is a property of the key/country; DAX can include it as a dimension column |
 | ISO week → week_start_date mapping | Python (pandas) | — | Convert ISO year + week number to Monday date after data lands in pandas |
 | `amzn.gr.*` key detection and logging | Python script | — | Simple string prefix check on the key column after the join |
@@ -480,7 +480,7 @@ import msal, os, requests
 import pandas as pd
 
 WORKSPACE_ID = "47144ee2-02f9-4408-9ed5-57acf6a9f44d"
-DATASET_ID   = "a95798aa-a3ec-4a89-9816-63cde534cded"
+DATASET_ID   = "a95798aa-a3ec-4a89-9816-63cde534cdd7"
 SCOPES       = ["https://analysis.windows.net/powerbi/api/Dataset.Read.All"]
 CACHE_PATH   = os.path.expanduser("~/.claude/powerbi_token_cache.json")
 
@@ -592,21 +592,24 @@ df["week_start_date"] = df.apply(
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Does `fact_fee_preview` have a currency column?**
    - What we know: `expected_fulfillment_fee_per_unit` is present; key format is `"COUNTRY | SKU"`.
    - What's unclear: Whether the table stores a currency code column (e.g., `fee_currency`).
    - Recommendation: First task in Wave 1 should be a `EVALUATE TOPN(3, 'fact_fee_preview')` schema inspection query to confirm all column names before writing the main aggregation query.
+   - RESOLVED: Assumption A2 — no currency column confirmed; derived from country prefix. Will be verified by skeleton.py run (Plan 01-02 checkpoint). If wrong, explore_fees.py currency mapping reverts to passthrough.
 
 2. **Are there countries beyond the 8 listed in the discussion log?**
    - What we know: US=1706, GB=603, DE=565, MX=360, IT=293, FR=281, ES=278, CA=184 (confirmed live). Total = 4,270. Remaining 1,004 keys are unaccounted.
    - What's unclear: Could be other EU countries (NL, BE, SE, PL) or `amzn.gr.*` keys.
    - Recommendation: Include a diagnostic step: `SELECT DISTINCT country FROM output_df` in the script, log the full country list.
+   - RESOLVED: Will be diagnosed by Plan 04 main() stdout — country list printed. No blocker to planning.
 
 3. **Does the `amzn.gr.*` key count match the 1,004 gap?**
    - What we know: 5,274 total − 4,270 country-attributed = 1,004 unaccounted.
    - Recommendation: The Phase 1 script should print the count of unjoined keys. If count ≠ 1,004, there are other unjoined keys beyond `amzn.gr.*`.
+   - RESOLVED: Will be answered by Plan 04 unjoined key count. Not a blocker — D-05 says include all keys.
 
 ---
 
