@@ -29,13 +29,24 @@
   3. `$_total_fba_fee_fee_preview` dependency on `f.AllOrders[unit_fba_fee]` is validated — confirmed returning real values or flagged as unusable and replaced with `$_unit_fba_fee_fee_preview` × units
   4. An exploratory script documents observed fee variance distribution and recommends an initial % threshold range for Phase 2 calibration
   5. BigQuery criterion superseded by D-17/D-18 (no BigQuery — local CSV state instead)
-**Plans**: 4 plans
+**Plans**: 4 plans in 4 waves
 
-Plans:
-- [ ] 01-01-PLAN.md — Project scaffold: .gitignore, .env.example, requirements.txt, pytest.ini, 8-test unit suite
+**Wave 1**
+- [ ] 01-01-PLAN.md — Project scaffold: .gitignore, .env.example, requirements.txt, pytest.ini, 9-test unit suite
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 01-02-PLAN.md — Walking skeleton + auth layer: skeleton.py, get_token(), run_dax(), validate_value_count()
+
+**Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 01-03-PLAN.md — Core aggregation: process_pbi_rows, iso_to_week_start, extract_country, get_currency_for_country, build_output_df
+
+**Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 01-04-PLAN.md — CSV output + main() entrypoint: FeeRow Pydantic model, DAX constants, full wiring
+
+**Cross-cutting constraints:**
+- No BigQuery imports in any plan (D-17/D-18)
+- All tasks run `pytest tests/ -x -q` after every change (Nyquist sampling)
+- MSAL device-code auth pattern from `powerbi-query` skill used verbatim (D-09)
 
 ### Phase 2: Detection + Output Pipeline
 **Goal**: A single end-to-end audit run can be triggered locally, detects anomalies from real data, and posts a ClickUp comment with an AI-generated summary and a CSV attachment
