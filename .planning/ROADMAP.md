@@ -24,10 +24,10 @@
 **Depends on**: Nothing (first phase)
 **Requirements**: DATA-01, DATA-02, DETECT-01
 **Success Criteria** (what must be TRUE):
-  1. Running the data pull script returns structured FBA Fulfillment Fee rows by SKU/ASIN across all Sales Regions (US, UK, CA, EU, MX) without authentication errors
+  1. Data access method is decided and working: either (a) BigQuery direct query on `vw_full_fee_preview`, or (b) custom DAX via PBI REST API — returns multi-week FBA Fee rows by SKU/ASIN/Sales Region without errors
   2. The exploratory output shows at minimum 4 weeks of history per SKU, confirming rolling median baseline is viable
-  3. Per-unit fee normalization (fee / units shipped) is validated against at least one known SKU with a confirmed units figure
-  4. An exploratory notebook or script documents the observed fee variance distribution and recommends an initial anomaly threshold range for Phase 2 calibration
+  3. `$_total_fba_fee_fee_preview` dependency on `f.AllOrders[unit_fba_fee]` is validated — confirmed returning real values or flagged as unusable and replaced with `$_unit_fba_fee_fee_preview` × units
+  4. An exploratory script documents observed fee variance distribution and recommends an initial % threshold range for Phase 2 calibration
   5. BigQuery tables `fee_audit_runs` and `fee_anomalies` exist with correct schemas (empty, ready to receive data)
 **Plans**: TBD
 

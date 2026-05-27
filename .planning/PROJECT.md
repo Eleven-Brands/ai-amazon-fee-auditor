@@ -36,17 +36,26 @@ Detect fee anomalies faster than manual review — alert the right people before
 
 ## Context
 
-**Brand:** OrganiHaus (Amazon FBA — US, UK, CA, EU, MX). Primary focus is the US marketplace for MVP.
+**Brand:** OrganiHaus (Amazon FBA — US, UK, CA, EU, MX). Data segmented by Sales Region.
 
-**Data source:** Power BI is the source of truth. FBA Fee and Storage Fee available at SKU/ASIN level with historical data. Access via `powerbi-query` skill; schema navigation via `dashboard-guide` skill.
+**Data source:** Power BI is the source of truth. Access via `powerbi-query` skill; schema navigation via `/dashboard-guide` skill.
 
-**Stack:** Python, BigQuery, Power BI, ClickUp. Scheduled via Windows Task Scheduler on local machine.
+**Power BI schema (known as of 2026-05-27):**
+- `$_unit_fba_fee_fee_preview` — fee per unit (AVERAGEX over `fact_fee_preview[expected_fulfillment_fee_per_unit]`) — **preferred measure**
+- `$_unit_last_fba_fee_fee_preview` — fee per unit latest snapshot only (`MAX(date_fee_preview)`) — **NOT useful for baselines**
+- `$_total_fba_fee_fee_preview` — total fee (`SUMX('f.AllOrders', [u_units_sold] * [unit_fba_fee])`) — ⚠️ `unit_fba_fee` column has empty definition; may return zero/null silently — **validate before using**
+- No netting of reimbursements on FBA fulfillment fee measures (unlike `$_referral_fee` which has explicit netting)
+- `fact_fee_preview` Power Query pulls from BigQuery view `amazon-sp-api-openbridge.1_Gold_Fees.vw_full_fee_preview` with no date filter — **historical rows exist in BigQuery, but PBI DAX measures expose only the latest snapshot by default**
 
-**Team:** Lucca and Gustavo (Data Team) are primary owners. Victor (Inventory) receives anomaly alerts. Data Team filters and escalates as needed.
+**Critical architecture implication:** Rolling 8-week baseline requires historical time-series rows. PBI standard measures only return the current snapshot. Phase 1 must determine whether to: (a) query BigQuery view `vw_full_fee_preview` directly, or (b) write custom DAX via PBI REST API that slices by date dimension.
+
+**Stack:** Python, BigQuery (`amazon-sp-api-openbridge.1_Gold_Fees.vw_full_fee_preview`), Power BI, ClickUp REST API. Scheduled via Windows Task Scheduler on local machine. Anthropic SDK (`claude-sonnet-4-6`) for narrative generation.
+
+**Team:** Lucca and Gustavo (Data Team) are primary owners. During testing, ClickUp output goes to Lucca only. Victor (Inventory) added when system is validated.
 
 **Current state:** No automated fee monitoring exists. Reviews are manual and ad hoc, meaning fee spikes can go undetected for extended periods.
 
-**Open calibration:** Anomaly threshold percentage has not been formally set. Will be determined empirically after the first data exploration run (likely in the 10–20% range per period).
+**Open calibration:** Anomaly threshold % not formally set. Will be calibrated empirically from the first data exploration run.
 
 ## Constraints
 
