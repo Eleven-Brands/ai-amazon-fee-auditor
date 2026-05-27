@@ -179,9 +179,27 @@ def process_pbi_rows(rows: list[dict]) -> pd.DataFrame:
     Renames PBI fully-qualified column names (e.g., "fact_fee_preview[col]")
     to bare column names. Derives week_start_date from ISO year + week number.
 
-    Implemented in Wave 3 (Plan 01-03).
+    Column rename sequence:
+      1. Strip bracket qualification: "fact_fee_preview[key_sales_marketplace_sku]" -> "key_sales_marketplace_sku"
+      2. Normalise YEAR/WEEKNUM to lowercase snake_case for consistency with test fixtures
+      3. Cast year and week_num to int (PBI may return float)
+      4. Add week_start_date via iso_to_week_start
     """
-    raise NotImplementedError("process_pbi_rows is implemented in Wave 3 (Plan 01-03)")
+    df = pd.DataFrame(rows)
+    # RESEARCH.md Pattern 4 — strip PBI column name qualifications FIRST
+    df.columns = [c.split("[")[-1].rstrip("]") for c in df.columns]
+    # Normalise to snake_case expected by tests
+    df = df.rename(columns={"YEAR": "year", "WEEKNUM": "week_num"})
+    # Cast to int — PBI may return floats
+    df["year"] = df["year"].astype(int)
+    df["week_num"] = df["week_num"].astype(int)
+    # Ensure avg_fee_per_unit is float
+    df["avg_fee_per_unit"] = df["avg_fee_per_unit"].astype(float)
+    # Derive Monday date for each ISO year+week
+    df["week_start_date"] = df.apply(
+        lambda row: iso_to_week_start(row["year"], row["week_num"]), axis=1
+    )
+    return df
 
 
 def extract_country(df: pd.DataFrame) -> pd.DataFrame:
@@ -190,19 +208,20 @@ def extract_country(df: pd.DataFrame) -> pd.DataFrame:
     Format: "<CC> | <CC>-<SKU>" — the prefix before " | " is the country code.
     Adds a 'country' column to the DataFrame.
 
-    Implemented in Wave 3 (Plan 01-03).
+    For amzn.gr.* keys that lack a " | " separator, the full key becomes
+    the country value — currency mapping will return "UNKNOWN" for these.
     """
-    raise NotImplementedError("extract_country is implemented in Wave 3 (Plan 01-03)")
+    df["country"] = df["key_sales_marketplace_sku"].str.split(" | ").str[0]
+    return df
 
 
 def get_currency_for_country(country_code: str) -> str:
     """Map a 2-letter country code to its ISO 4217 currency code.
 
     Unknown country codes return 'UNKNOWN' rather than raising an exception.
-
-    Implemented in Wave 3 (Plan 01-03).
+    Uses the module-level COUNTRY_CURRENCY constant (D-11, RESEARCH.md Pitfall 6).
     """
-    raise NotImplementedError("get_currency_for_country is implemented in Wave 3 (Plan 01-03)")
+    return COUNTRY_CURRENCY.get(country_code, "UNKNOWN")
 
 
 def build_output_df(fee_df: pd.DataFrame, sku_df: pd.DataFrame) -> pd.DataFrame:
@@ -220,10 +239,18 @@ def iso_to_week_start(iso_year: int, iso_week: int) -> pd.Timestamp:
     """Return the Monday date for a given ISO year + week number.
 
     Uses pd.Timestamp.fromisocalendar(year, week, 1) — day 1 of ISO week is Monday.
+    RESEARCH.md: do not hand-roll date arithmetic; fromisocalendar handles year
+    boundary correctly (ISO 2026 week 1 Monday = 2025-12-29).
 
-    Implemented in Wave 3 (Plan 01-03).
+    If iso_week exceeds the number of weeks in iso_year (e.g., week 53 in a 52-week year),
+    falls back to week 1 of the following year rather than raising ValueError. This handles
+    edge cases in PBI data where the week counter wraps across year boundaries.
     """
-    raise NotImplementedError("iso_to_week_start is implemented in Wave 3 (Plan 01-03)")
+    try:
+        return pd.Timestamp.fromisocalendar(int(iso_year), int(iso_week), 1)
+    except ValueError:
+        # iso_week exceeds max weeks for this year — treat as week 1 of next year
+        return pd.Timestamp.fromisocalendar(int(iso_year) + 1, 1, 1)
 
 
 # ---------------------------------------------------------------------------
