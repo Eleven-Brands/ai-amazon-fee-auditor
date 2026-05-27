@@ -1,7 +1,7 @@
 # Project State: AI Amazon Fee Auditor
 
 **Last updated:** 2026-05-27
-**Session:** Phase 1 executing — Wave 1 complete, Wave 2 next
+**Session:** Phase 1 executing — Wave 2 complete, Wave 3 next
 
 ---
 
@@ -18,12 +18,12 @@
 ## Current Position
 
 **Phase:** 1 — Data Foundation
-**Plan:** Wave 2 — Plan 01-02 (next to execute)
+**Plan:** Wave 3 — Plan 01-03 (next to execute)
 **Status:** Executing
 
 ```
-Progress: [██········] 25%
-Phase 1: [►] Data Foundation  ← EXECUTING — Wave 2/4
+Progress: [████······] 50%
+Phase 1: [►] Data Foundation  ← EXECUTING — Wave 3/4
 Phase 2: [ ] Detection + Output Pipeline
 Phase 3: [ ] Scheduling + Operationalization
 ```
@@ -37,7 +37,7 @@ Phase 3: [ ] Scheduling + Operationalization
 | Phases total | 3 |
 | Phases complete | 0 |
 | Plans total | 4 (Phase 1) |
-| Plans complete | 1 |
+| Plans complete | 2 |
 | Requirements mapped | 11/11 |
 
 ---
@@ -56,16 +56,21 @@ Phase 3: [ ] Scheduling + Operationalization
 | Rolling 8-week median per SKU per Sales Region | Median is more robust to outliers than mean; per-unit normalization needed for volume-adjusted fairness |
 | output/* with !output/.gitkeep gitignore pattern | Tracks sentinel file to preserve output/ in git while ignoring all CSV contents |
 | 8 tests use natural ImportError RED state | No @pytest.mark.skip or xfail — enforces TDD discipline for Wave 2 implementation |
+| fact_fee_preview[currency] column exists (A2 resolved) | D-11 country-derived currency kept; PBI column available as direct source for Phase 2 if preferred |
+| Wave 4 DAX MUST filter is_latest = 1 | fact_fee_preview stores current + historical fee schedules; is_latest = 0 rows are stale and must be excluded from aggregation |
 
 ### Open Questions (Phase 1 Must Resolve)
 
-- Does Power BI expose fee-per-unit or only total fee per period per SKU?
+- Does Power BI expose fee-per-unit or only total fee per period per SKU? — RESOLVED (Wave 2): `expected_fulfillment_fee_per_unit` confirmed in schema
 - Are FBA fee credits/reimbursements already netted in Power BI, or separate line items?
 - How many weeks of history are available per SKU? (Need ≥4 for rolling median)
 - How many active US SKUs? (>500 may need top-N filter to manage alert volume)
 - Does Power BI require explicit marketplace filter? (Avoid mixing fee structures across regions)
 - Which ClickUp task ID receives the reports? (Required before Phase 2)
 - Does `powerbi-query` skill already have credentials configured in n8n?
+- [CRITICAL — Wave 4] Does `is_latest = 1` filter correctly isolate current fee schedule rows? Confirm row count with vs. without filter before writing the main aggregation DAX query.
+- Does `fact_fee_preview[currency]` match COUNTRY_CURRENCY mapping for CA/MX/GB, or are there discrepancies?
+- What does the `BE` country prefix represent — active Belgium marketplace or EU bundle key?
 
 ### Calibration Pending
 
@@ -92,11 +97,11 @@ Phase 3: [ ] Scheduling + Operationalization
 
 ### Last Session
 
-**What was accomplished:** Plan 01-01 executed. Project scaffold created (.gitignore, .env.example, requirements.txt, pytest.ini, output/.gitkeep). 8 unit tests written in RED state (ImportError) with conftest.py fixtures. All files committed atomically per task. T-01-01 (.env disclosure) mitigated and verified.
+**What was accomplished:** Plan 01-02 executed. skeleton.py created verbatim from SKELETON.md — auth and PBI connectivity proven live (Skeleton: OK — 5 rows returned). explore_fees.py created with get_token, run_dax, validate_value_count fully implemented and 5 Wave-3 stubs. 2 of 8 tests now GREEN. Critical schema findings from live run: currency column exists (A2 resolved), is_latest flag discovered (CRITICAL for Wave 4 DAX filter). Test mock bug fixed ([Rule 1]).
 
-**Stopping point:** Plan 01-01 complete. SUMMARY.md written. STATE.md and ROADMAP.md updated.
+**Stopping point:** Plan 01-02 complete. SUMMARY.md written. STATE.md and ROADMAP.md updated.
 
-**Next action:** Execute Plan 01-02 (Wave 2) — implement `explore_fees.py` to turn all 8 tests GREEN.
+**Next action:** Execute Plan 01-03 (Wave 3) — implement process_pbi_rows, extract_country, get_currency_for_country, build_output_df, iso_to_week_start to turn remaining 6 tests GREEN.
 
 ---
 

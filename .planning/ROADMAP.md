@@ -35,7 +35,7 @@
 - [x] 01-01-PLAN.md — Project scaffold: .gitignore, .env.example, requirements.txt, pytest.ini, 9-test unit suite
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 01-02-PLAN.md — Walking skeleton + auth layer: skeleton.py, get_token(), run_dax(), validate_value_count()
+- [x] 01-02-PLAN.md — Walking skeleton + auth layer: skeleton.py, get_token(), run_dax(), validate_value_count()
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 01-03-PLAN.md — Core aggregation: process_pbi_rows, iso_to_week_start, extract_country, get_currency_for_country, build_output_df
@@ -78,7 +78,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Data Foundation | 1/4 | In progress | 01-01: 2026-05-27 |
+| 1. Data Foundation | 2/4 | In progress | 01-01: 2026-05-27, 01-02: 2026-05-27 |
 | 2. Detection + Output Pipeline | 0/? | Not started | - |
 | 3. Scheduling + Operationalization | 0/? | Not started | - |
 
@@ -105,4 +105,4 @@
 ---
 
 *Roadmap created: 2026-05-27*
-*Last updated: 2026-05-27 — Plan 01-01 complete (scaffold + 8-test RED harness)*
+*Last updated: 2026-05-27 — Plan 01-02 complete (skeleton.py live + explore_fees.py auth layer, 2/8 tests GREEN, is_latest flag and currency column discovered)*
