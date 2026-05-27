@@ -45,14 +45,14 @@
 **Plans**: TBD
 
 ### Phase 3: Scheduling + Operationalization
-**Goal**: The audit runs automatically every week via n8n and can be triggered on demand via webhook or CLI, with no manual intervention required under normal conditions
+**Goal**: The audit runs automatically every week via Windows Task Scheduler and can be triggered on demand via CLI, with no manual intervention required under normal conditions
 **Mode:** mvp
 **Depends on**: Phase 2
 **Requirements**: EXEC-01, EXEC-02
 **Success Criteria** (what must be TRUE):
-  1. An n8n workflow on `elevenbrands.app.n8n.cloud` triggers the audit automatically on a weekly schedule and a ClickUp comment appears without manual action
-  2. Sending a POST request to the n8n webhook URL (or running `python run_audit.py --trigger manual`) completes a full audit run on demand
-  3. The FastAPI endpoint `POST /run-audit` returns HTTP 202 and the audit completes asynchronously
+  1. A Windows Task Scheduler task fires the audit script on a weekly schedule and a ClickUp comment appears without manual action
+  2. Running `python run_audit.py --trigger manual` completes a full on-demand audit run and posts results to ClickUp
+  3. The scheduled task and CLI entrypoint share identical execution logic — same `run_audit()` function, no divergent code paths
 **Plans**: TBD
 
 ---

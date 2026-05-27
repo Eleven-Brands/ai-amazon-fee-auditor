@@ -30,8 +30,8 @@
 
 ### Execution
 
-- [ ] **EXEC-01**: System runs automatically on a weekly schedule via n8n (`elevenbrands.app.n8n.cloud`)
-- [ ] **EXEC-02**: System supports on-demand execution via manual trigger (n8n webhook or CLI `python run_audit.py --trigger manual`)
+- [ ] **EXEC-01**: System runs automatically on a weekly schedule via Windows Task Scheduler on the local machine
+- [ ] **EXEC-02**: System supports on-demand execution via CLI (`python run_audit.py --trigger manual`)
 
 ---
 

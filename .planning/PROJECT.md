@@ -2,7 +2,7 @@
 
 ## What This Is
 
-An AI agent system that automatically audits Amazon FBA fees for OrganiHaus, detecting anomalies in FBA Fee and Storage Fee at the SKU/ASIN level by comparing current charges against historical baselines. It runs weekly (and on-demand), posts findings to ClickUp for the Data Team and Victor (Inventory), and escalates unusual charges for human investigation.
+An AI agent system that automatically audits Amazon FBA fees for OrganiHaus, detecting anomalies in FBA Fulfillment Fee at the SKU/ASIN level by comparing current charges against historical baselines. It runs weekly via Windows Task Scheduler (and on-demand via CLI), posts findings to ClickUp, and escalates unusual charges for human investigation.
 
 ## Core Value
 
@@ -16,15 +16,15 @@ Detect fee anomalies faster than manual review — alert the right people before
 
 ### Active
 
-- [ ] Query FBA Fee and Storage Fee data from Power BI by SKU/ASIN via `powerbi-query` skill
-- [ ] Calculate historical baseline per SKU (rolling average/median over recent periods)
-- [ ] Detect anomalies: fee change exceeds configurable threshold vs baseline (threshold TBD — calibrate from first data run)
-- [ ] Generate periodic fee evolution report (trend by SKU/ASIN)
-- [ ] Post ClickUp comment with concise anomaly summary on completion
-- [ ] Attach detailed anomaly report file (CSV or HTML) to ClickUp task
-- [ ] Ask human analyst in ClickUp whether to create an investigation sub-task for flagged SKUs
-- [ ] Support weekly scheduled execution via n8n
-- [ ] Support on-demand execution (manual trigger)
+- [ ] Query FBA Fulfillment Fee from Power BI by SKU/ASIN, segmented by Sales Region, via `powerbi-query` skill
+- [ ] Calculate rolling 8-week median baseline per SKU per Sales Region, normalized by units shipped
+- [ ] Detect anomalies: fee per unit deviates beyond configurable % threshold vs baseline (calibrate from first data run)
+- [ ] Classify sustained shifts (N consecutive same-direction flags) to avoid repeated alerts on permanent fee changes
+- [ ] Post ClickUp comment with concise anomaly summary (<150 words, Claude-generated) on completion
+- [ ] Attach CSV report to ClickUp with full anomaly list (SKU, ASIN, region, deviation, delta, fee/unit)
+- [ ] Ask human analyst in ClickUp whether to open an investigation task for top flagged SKUs
+- [ ] Support weekly scheduled execution via Windows Task Scheduler (local machine)
+- [ ] Support on-demand execution via CLI (`python run_audit.py --trigger manual`)
 
 ### Out of Scope
 
@@ -40,7 +40,7 @@ Detect fee anomalies faster than manual review — alert the right people before
 
 **Data source:** Power BI is the source of truth. FBA Fee and Storage Fee available at SKU/ASIN level with historical data. Access via `powerbi-query` skill; schema navigation via `dashboard-guide` skill.
 
-**Stack:** Python, BigQuery, Power BI, ClickUp, n8n (`elevenbrands.app.n8n.cloud`).
+**Stack:** Python, BigQuery, Power BI, ClickUp. Scheduled via Windows Task Scheduler on local machine.
 
 **Team:** Lucca and Gustavo (Data Team) are primary owners. Victor (Inventory) receives anomaly alerts. Data Team filters and escalates as needed.
 
@@ -50,11 +50,10 @@ Detect fee anomalies faster than manual review — alert the right people before
 
 ## Constraints
 
-- **Execution:** n8n cloud (`elevenbrands.app.n8n.cloud`) — no dependency on local machine; use simple n8n workflows to minimize maintenance overhead
+- **Execution:** Windows Task Scheduler on local machine — simple, no additional infrastructure. Requires machine to be on at scheduled time.
 - **Data access:** Power BI only via `powerbi-query` skill — no direct DB connection to Amazon Seller Central
 - **Token budget:** Each agent must receive only the context it needs — no large data dumps in prompts; summaries and structured outputs only
-- **Fallback:** Windows Task Scheduler + Python script if n8n is unavailable
-- **Output format:** ClickUp comments must be concise; verbose detail in attached file only
+- **Output format:** ClickUp comments must be concise; verbose detail in attached CSV only
 
 ## Key Decisions
 
@@ -62,7 +61,7 @@ Detect fee anomalies faster than manual review — alert the right people before
 |----------|-----------|---------|
 | Historical baseline (not rate card) for anomaly detection | No external rate card dependency; faster to implement; catches all fee changes regardless of cause | — Pending |
 | Single agent MVP, decompose later | Avoids over-engineering before complexity is proven necessary | — Pending |
-| n8n for scheduled execution | Cloud-hosted, retry logic, logging, no local machine dependency | — Pending |
+| Windows Task Scheduler for execution (not n8n) | Simpler to set up and maintain; no additional infrastructure; acceptable trade-off since the local machine is available | — Pending |
 | Thresholds are configurable, not hardcoded | No established threshold exists; must be calibrated empirically | — Pending |
 | ClickUp as primary output channel | Victor and Data Team already live in ClickUp; minimal friction | — Pending |
 
