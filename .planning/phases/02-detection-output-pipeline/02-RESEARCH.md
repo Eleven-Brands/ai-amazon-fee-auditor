@@ -667,22 +667,16 @@ task_id = config['CLICKUP_TASK_ID']
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Does `fact_fee_preview` have weekly rows or sparse fee-schedule entries?**
-   - What we know: Phase 1 confirmed 3.7M total rows vs 5,274 is_latest=1 rows. Historical structure uncertain.
-   - What's unclear: Whether historical rows represent daily fee schedule entries or only when fees changed.
-   - Recommendation: On first run, print `len(historical_df)` per country batch and log the date range of entries. If counts are 1-5 per key, baseline will be sparse for first 8 weeks. If counts are ~700 per key (daily over 2 years), date filtering might be worthwhile. The no-filter approach handles both correctly.
+   - **Resolution:** Treated as sparse change log (best-case assumption). No date filter on historical DAX — the no-filter approach handles both sparse and dense correctly. First run logs `len(historical_df)` per country batch so actual density is visible at runtime.
 
 2. **What is the run date reference for the continuity check?**
-   - What we know: The check compares `last_records['run_date']` against `current_date - 7 days`.
-   - What's unclear: If the audit doesn't run exactly 7 days apart (e.g., a run is delayed 8 days), the continuity check would reset counts unnecessarily.
-   - Recommendation: Accept ±1 day tolerance: `abs((last_run_date - prev_expected).days) <= 1`. Or simplify: reset only if the last run was more than 10 days ago.
+   - **Resolution:** ±1 day tolerance implemented: `abs((last_run_date - prev_expected).days) <= 1`. Implemented in `load_prior_counts()` in 02-03. Resets count if last run was more than 8 days ago.
 
 3. **Which test task ID to use for ClickUp testing?**
-   - What we know: D-14 says CLICKUP_TASK_ID is a placeholder requiring developer configuration.
-   - What's unclear: Whether a test task already exists in OrganiHaus ClickUp workspace.
-   - Recommendation: Create a dedicated "FBA Fee Auditor - Test" task in ClickUp before Phase 2 execution. Add to plan as a prerequisite step.
+   - **Resolution:** Deferred to human checkpoint in 02-04. Developer creates a test task in ClickUp and replaces "PLACEHOLDER" in `audit_config.json` before the live run. The plan's checkpoint step covers this explicitly.
 
 ---
 
