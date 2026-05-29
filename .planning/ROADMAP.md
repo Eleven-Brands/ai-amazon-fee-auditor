@@ -32,16 +32,16 @@
 **Plans**: 4 plans in 4 waves
 
 **Wave 1**
-- [ ] 01-01-PLAN.md — Project scaffold: .gitignore, .env.example, requirements.txt, pytest.ini, 9-test unit suite
+- [x] 01-01-PLAN.md — Project scaffold: .gitignore, .env.example, requirements.txt, pytest.ini, 9-test unit suite
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 01-02-PLAN.md — Walking skeleton + auth layer: skeleton.py, get_token(), run_dax(), validate_value_count()
+- [x] 01-02-PLAN.md — Walking skeleton + auth layer: skeleton.py, get_token(), run_dax(), validate_value_count()
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 01-03-PLAN.md — Core aggregation: process_pbi_rows, iso_to_week_start, extract_country, get_currency_for_country, build_output_df
+- [x] 01-03-PLAN.md — Core aggregation: process_pbi_rows, iso_to_week_start, extract_country, get_currency_for_country, build_output_df
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 01-04-PLAN.md — CSV output + main() entrypoint: FeeRow Pydantic model, DAX constants, full wiring
+- [x] 01-04-PLAN.md — CSV output + main() entrypoint: FeeRow Pydantic model, DAX constants, full wiring
 
 **Cross-cutting constraints:**
 - No BigQuery imports in any plan (D-17/D-18)
@@ -78,7 +78,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Data Foundation | 0/4 | Not started | - |
+| 1. Data Foundation | 4/4 | Complete | 01-01: 2026-05-27, 01-02: 2026-05-27, 01-03: 2026-05-27, 01-04: 2026-05-27 |
 | 2. Detection + Output Pipeline | 0/? | Not started | - |
 | 3. Scheduling + Operationalization | 0/? | Not started | - |
 
@@ -105,4 +105,4 @@
 ---
 
 *Roadmap created: 2026-05-27*
-*Last updated: 2026-05-27 — Phase 1 plans written (4 plans, 4 waves)*
+*Last updated: 2026-05-27 — Phase 1 complete (4/4 plans). Plan 01-04: main() entrypoint wired, live run verified (5,274 rows, output/explore_fees_20260527.csv written). Critical discovery: fact_fee_preview is a fee schedule history table — Phase 2 baseline strategy must use snapshot accumulation or marketplace-batched queries.*

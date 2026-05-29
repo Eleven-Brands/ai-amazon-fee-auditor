@@ -9,12 +9,12 @@
 
 ### Data Access
 
-- [ ] **DATA-01**: Agent queries Power BI for FBA Fulfillment Fee by SKU/ASIN (weekly granularity, rolling 8-12 week window) via `powerbi-query` skill
-- [ ] **DATA-02**: Queries segment data by **Sales Region** (not a single marketplace filter — OrganiHaus sells US, UK, CA, EU, MX)
+- [x] **DATA-01**: Agent queries Power BI for FBA Fulfillment Fee by SKU/ASIN (weekly granularity, rolling 8-12 week window) via `powerbi-query` skill
+- [x] **DATA-02**: Queries segment data by **Sales Region** (not a single marketplace filter — OrganiHaus sells US, UK, CA, EU, MX)
 
 ### Anomaly Detection
 
-- [ ] **DETECT-01**: System calculates a rolling 8-week median baseline per SKU per Sales Region, normalized by units shipped (fee per unit)
+- [x] **DETECT-01**: System calculates a rolling 8-week median baseline per SKU per Sales Region, normalized by units shipped (fee per unit)
 - [ ] **DETECT-02**: System flags SKUs where current fee per unit deviates from baseline beyond a configurable % threshold (threshold to be calibrated empirically from first data run)
 - [ ] **DETECT-03**: System classifies SKUs that flag anomaly in the same direction for N consecutive weeks as "sustained shift" — prevents repeated alerts on permanent fee changes (e.g. size tier reclassification)
 
@@ -83,9 +83,9 @@
 
 | Requirement | Phase | Status |
 |---|---|---|
-| DATA-01 | Phase 1 | Pending |
-| DATA-02 | Phase 1 | Pending |
-| DETECT-01 | Phase 1 | Pending |
+| DATA-01 | Phase 1 | Complete |
+| DATA-02 | Phase 1 | Complete |
+| DETECT-01 | Phase 1 | Complete |
 | DETECT-02 | Phase 2 | Pending |
 | DETECT-03 | Phase 2 | Pending |
 | OUT-01 | Phase 2 | Pending |
