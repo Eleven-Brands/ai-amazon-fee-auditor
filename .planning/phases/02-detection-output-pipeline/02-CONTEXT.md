@@ -15,19 +15,19 @@ Build the full audit pipeline end-to-end: pull 16 weeks of historical FBA fee da
 
 ### Baseline Strategy
 
-- **D-01:** Baseline method = **historical DAX query on first run**, then weekly snapshot accumulation. First run queries `fact_fee_preview` WITHOUT `is_latest` filter, batched by country code, to obtain 16 weeks of historical rows. Subsequent runs fetch only the current `is_latest=1` snapshot and append it to `snapshots/`.
-- **D-02:** Historical query batching = **by country code** (US, CA, GB, DE, FR, ES, IT, MX, BE — 9 batches + one batch for `amzn.gr.*` keys). Each batch stays well under the 1M PBI value limit. Sales Region-level batching is NOT used (EU bundle would be too large).
-- **D-03:** Lookback window for first run = **16 weeks**. Enough for a robust 8-week rolling median with 8 weeks of margin.
-- **D-04:** Snapshot storage = **one CSV per run date**: `snapshots/snapshot_YYYYMMDD.csv`. Rolling baseline window slices the N most recent files. Simple, auditable, each week individually reprocessable.
-- **D-05:** Rolling baseline = **8-week rolling median** of `avg_fee_per_unit` per `key_sales_marketplace_sku`. Median is preferred over mean (more robust to outliers — confirmed Phase 1 decision).
-- **D-06:** First-run detection: if fewer than 4 snapshots exist when the script runs, the system still computes baselines from whatever history is available but logs a warning ("baseline computed from N weeks — results may be noisy until 4+ weeks accumulate").
+- **D-01:** ~~Historical DAX batch on first run~~ → **SUPERSEDED by D-24 + D-25**. Historical batch approach abandoned: `fact_fee_preview` historical data is near-daily (not sparse), causing 15MB+ byte limit violations for US. Snapshot accumulation is kept as secondary mechanism for time-series tracking only.
+- **D-02:** ~~Historical batching by country~~ → **SUPERSEDED**. See D-24 for new data acquisition strategy.
+- **D-03:** ~~16-week lookback~~ → **SUPERSEDED**. No historical batch needed; 11B expected fee serves as baseline from day one.
+- **D-04:** Snapshot storage = **one CSV per run date**: `snapshots/snapshot_YYYYMMDD.csv`. Kept for time-series audit trail. Not used as detection baseline.
+- **D-05:** ~~Rolling 8-week median~~ → **SUPERSEDED by D-25**. Rolling median replaced by 11B expected fee comparison as primary detection method.
+- **D-06:** ~~Sparse history warning~~ → **SUPERSEDED**. No longer relevant since D-25 uses a static expected fee baseline.
 
 ### Anomaly Detection
 
-- **D-07:** Anomaly threshold = **15%** deviation from 8-week rolling median baseline (initial value — calibrate empirically after first real run).
-- **D-08:** Config file = **`audit_config.json`** in project root. Contains: `THRESHOLD_PCT`, `CLICKUP_TASK_ID`, `RECIPIENTS`, `SUSTAINED_SHIFT_N`. All calibration knobs in one place. Tracked in git (no secrets).
-- **D-09:** Anomaly direction handling = **flag increases prominently, decreases as informational**. ClickUp comment has two sections: "Fee increases — action needed (N SKUs)" and "Fee reductions — informational (M SKUs)". Both categories appear in the attached CSV.
-- **D-10:** Baseline grain = **per `key_sales_marketplace_sku`** (country-level key, not Sales Region-level). EU countries (DE, FR, ES, IT) have separate baselines per country. Sales Region grouping is preserved in the output CSV for reference (via `SKUs[Sales Region]` join from Phase 1) but detection runs at country level.
+- **D-07:** ~~15% rolling median threshold~~ → **SUPERSEDED by D-26**. Threshold now applied to absolute overcharge vs `$_unit_last_fba_fee_calculation_expected`.
+- **D-08:** Config file = **`audit_config.json`** in project root. Contains: `CLICKUP_TASK_ID`, `RECIPIENTS`, `BACKLOG_WEIGHT`, `MONTHLY_CASE_LIMIT`, `FNSKU_CAP_DAYS`. Updated schema — `THRESHOLD_PCT` and `SUSTAINED_SHIFT_N` removed. Tracked in git (no secrets).
+- **D-09:** ~~Increases prominent, decreases informational~~ → **SUPERSEDED by D-31**. Output now organized by Sales Region, not by direction.
+- **D-10:** Detection grain = **per `key_sales_marketplace_sku`** (country-level). Unchanged.
 
 ### Sustained-Shift Detection (DETECT-03)
 
@@ -37,11 +37,11 @@ Build the full audit pipeline end-to-end: pull 16 weeks of historical FBA fee da
 
 ### ClickUp Output
 
-- **D-14:** ClickUp task ID = **placeholder in `audit_config.json`** (`CLICKUP_TASK_ID: "PLACEHOLDER"`). Developer sets real task ID before first run. Phase 2 plan must include a note: "configure `CLICKUP_TASK_ID` before executing."
-- **D-15:** ClickUp comment structure = Claude-generated summary (≤150 words) covering: run date, total SKUs scanned, fee increases (count + top 3 by deviation %), fee reductions (count, informational). Comment ends with escalation prompt.
-- **D-16:** Escalation prompt (ESC-01) = plain text at end of comment: `"Reply YES to this comment to open an investigation task for the top flagged SKUs."` No form, no options — human replies manually and creates the task themselves.
-- **D-17:** ClickUp recipients = **no notifications during testing** (`RECIPIENTS: []` in `audit_config.json`). Victor added when system is validated by updating config — no code changes.
-- **D-18:** CSV attachment (OUT-02) = attached to the same ClickUp comment. Columns: `key_sales_marketplace_sku`, `country`, `sales_region`, `sku`, `asin`, `week_start_date`, `avg_fee_per_unit`, `baseline_median_fee_per_unit`, `deviation_pct`, `direction`, `sustained_shift`. Includes both increase and decrease rows; sustained-shift rows marked with flag but included.
+- **D-14:** ClickUp task ID = **placeholder in `audit_config.json`** (`CLICKUP_TASK_ID: "PLACEHOLDER"`). Developer sets real task ID before first run.
+- **D-15:** ~~Claude summary covering increases/decreases~~ → **SUPERSEDED by D-31**. ClickUp comment now has **4 per-region tables** (US, CA, GB, EU) each with top-N SKUs ranked by priority score.
+- **D-16:** Escalation prompt (ESC-01) = plain text at end of comment: `"Reply YES to this comment to open an investigation task for the top flagged SKUs."` Unchanged.
+- **D-17:** ClickUp recipients = **no notifications during testing** (`RECIPIENTS: []`). Unchanged.
+- **D-18:** CSV attachment (OUT-02) = full anomaly list. Updated columns: `key_sales_marketplace_sku`, `country`, `sales_region`, `sku`, `asin`, `fee_preview_current`, `fee_11b_expected`, `overcharge_per_unit`, `velocity_w3`, `impact_4w`, `priority_score`, `consecutive_weeks_flagged`, `days_since_last_case`, `eligible_for_case`, `run_date`.
 
 ### Claude Narrative
 
@@ -54,13 +54,54 @@ Build the full audit pipeline end-to-end: pull 16 weeks of historical FBA fee da
 - **D-22:** Phase 2 produces **`run_audit.py`** — a new script that imports and reuses `get_token()`, `run_dax()`, `validate_value_count()`, `process_pbi_rows()`, `build_output_df()`, and `iso_to_week_start()` from `explore_fees.py`. No code duplication.
 - **D-23:** Entry points: `python run_audit.py` (full audit run). Phase 3 will add `--trigger manual` flag and Windows Task Scheduler integration.
 
+### SKU Validity Filter (NEW — from exploration session 2026-05-28)
+
+- **D-24:** Active SKU filter = **3-part filter** applied before any anomaly detection. All three conditions must be met:
+  1. `SKUs[status] = "Active"` — from `fAllListingsReport` merged into SKUs table via `key_country_sku`
+  2. `SKUs[Life Cycle] NOT IN ("C", "D")` — Cancelled and Discontinued excluded; M, R, P allowed
+  3. Inventory Ledger: `qty_sellable > 0` AND `max(Date) >= today - 90 days` (country-level, not EU-region aggregate) — uses raw `Inventory Ledger[Key Column: Country | SKU]` to avoid EU region inventory bleed-through
+- **D-24a:** Two separate PBI queries + Python join:
+  - Query A: `SUMMARIZECOLUMNS('SKUs'[Key Column: Country | SKU], 'SKUs'[Life Cycle], 'SKUs'[status])` filtered to Active + valid lifecycle
+  - Query B: `SUMMARIZECOLUMNS('Inventory Ledger'[Key Column: Country | SKU], "max_date", MAX(...), "qty_sellable", ...)` filtered to qty > 0
+  - Python: inner join of A and B, then filter `max_date >= today - 90 days`
+- **D-24b:** Result is ~484 valid SKUs (validated in exploration). Much smaller than 5,274 raw fee preview keys.
+
+### Fee Baseline — 11B Expected (NEW — replaces D-05)
+
+- **D-25:** Detection baseline = **`$_unit_last_fba_fee_calculation_expected`** (PBI measure). Source: `fact_fba_fee_expected` table (standalone Excel: `standalone_files/db_fba_fee_expected.xlsx`). This is the fee we calculate Amazon SHOULD charge based on our own dimensional measurements. Uses `ALL('Calendar'[Date])` internally so no date filter needed.
+- **D-26:** Overcharge metric = `fee_preview_current - fee_11b_expected`. Positive = Amazon is overcharging. Only positive overcharges are actioned. Negative overcharges (Amazon charging less than expected) logged to CSV but not alerted.
+- **D-26a:** `fee_preview_current` = `$_unit_last_fba_fee_fee_preview` (PBI measure). Uses `MAX('fact_fee_preview'[date_fee_preview])` context.
+- **D-26b:** Data query: single `SUMMARIZECOLUMNS` call grouped by `SKUs[Key Column: Country | SKU]` with both measures + `m_sold_prev3` + `'SKUs'[Native Family]` + `'SKUs'[Sales Region]` + `'SKUs'[Country]`.
+
+### Prioritization Engine (NEW)
+
+- **D-27:** Impact score = `overcharge_per_unit × m_sold_prev3 × 4` — dollar overcharge over next 4 weeks at current velocity. `m_sold_prev3` = average weekly units sold over last 3 weeks (PBI measure from `Measurement Table`).
+- **D-28:** Priority score = `impact_4w × (1 + consecutive_weeks_flagged × 0.2)`. Weight 0.2 per week of backlog. First run: `consecutive_weeks_flagged = 0` for all SKUs.
+- **D-29:** Remeasurement slot limits per Sales Region per calendar month (resets on 1st):
+  - US: 10 cases/month
+  - CA: 10 cases/month
+  - GB: 10 cases/month
+  - EU: 10 cases/month
+- **D-30:** FNSKU cap = **< 2 cases closed per SKU in last 60 days**. Source: `standalone_files/db_amazon_remeasurement_cases.csv`. Uses `Date Closed` column (not `Date Created`). Also uses `Date Closed` for monthly slot count.
+- **D-30a:** Cases CSV schema: `Region`, `SKU`, `ASIN`, `FNSKU`, `Case ID`, `Date Created`, `Date Closed`, `Status`, `Outcome`, `Refunded Amount`, `Currency`, `Lead Time`. `Region` maps directly to Sales Region (US/CA/GB/EU). Encoding: latin-1.
+- **D-30b:** `slots_remaining[region] = 10 - COUNT(Date Closed in [month_start, today] WHERE Region = region)`
+- **D-30c:** `sku_eligible = COUNT(Date Closed in [today-60, today] WHERE SKU = sku) < 2`
+
+### ClickUp Output Structure (NEW — supersedes D-15)
+
+- **D-31:** ClickUp comment has **4 sections, one per active Sales Region** (US, CA, GB, EU). Each section is a ranked table of up to 10 SKUs with columns: Rank, SKU, Country (EU only), Velocity/week, +$/unit overcharge, Impact/4wk, Days since last case.
+- **D-31a:** Sections that have 0 eligible anomalies this run are omitted from comment.
+- **D-31b:** Claude generates **one-paragraph summary per region** (≤50 words each), not a single 150-word summary. Total comment ≤ 300 words + 4 tables.
+- **D-31c:** Watchlist (beyond top 10 per region) goes in CSV attachment only — not in ClickUp comment.
+- **D-32:** EU section includes `Country` column to distinguish DE/FR/ES/IT/PL/etc. Other regions do not (single country per region).
+
 ### Claude's Discretion
 
 - Exact function signatures in `run_audit.py`
 - Internal module structure (single file vs split into detection.py, output.py)
 - ClickUp API error handling details (retry policy, timeout)
-- Exact DAX query for historical batch (column selection, ORDER BY)
 - Pydantic models for audit output rows (follow FeeRow pattern from explore_fees.py)
+- Exact SUMMARIZECOLUMNS DAX for combined fee + velocity + 11B expected query
 
 </decisions>
 
@@ -121,11 +162,13 @@ Build the full audit pipeline end-to-end: pull 16 weeks of historical FBA fee da
 ## Specific Ideas
 
 - The `anomaly_history.csv` schema was pre-designed in Phase 1 (explore_fees.py line 424-428) — use it as-is.
-- `audit_config.json` default values: `{"THRESHOLD_PCT": 15, "CLICKUP_TASK_ID": "PLACEHOLDER", "RECIPIENTS": [], "SUSTAINED_SHIFT_N": 4}`.
-- ClickUp comment ends with the literal text: `"Reply YES to this comment to open an investigation task for the top flagged SKUs."`
-- Claude receives anomaly JSON summary (not raw rows). Format: `{"run_date": "...", "total_scanned": N, "fee_increases": [{"sku": "...", "deviation_pct": X, ...}], "fee_reductions": [...]}`.
-- Historical batch query: one `run_dax()` call per country code (9 calls + 1 for amzn.gr.*). Filter `fact_fee_preview` by country prefix in DAX using `FILTER` on `key_sales_marketplace_sku`.
-- The attached CSV must include ALL anomalies (both increases and decreases, including sustained-shift rows flagged). Sustained-shift rows have `sustained_shift: true`.
+- `audit_config.json` updated default values: `{"CLICKUP_TASK_ID": "PLACEHOLDER", "RECIPIENTS": [], "BACKLOG_WEIGHT": 0.2, "MONTHLY_CASE_LIMIT": 10, "FNSKU_CAP_DAYS": 60}`.
+- ClickUp comment ends with: `"Reply YES to this comment to open an investigation task for the top flagged SKUs."`
+- Claude receives one anomaly JSON per region: `{"region": "US", "run_date": "...", "slots_used": 10, "top_skus": [{"sku": "...", "country": "US", "overcharge": 0.51, "impact_4w": 375, "velocity_w3": 184, "days_since_case": 29}]}`.
+- Cases CSV path: `standalone_files/db_amazon_remeasurement_cases.csv` (encoding: latin-1). Date columns use `dayfirst=True` parsing.
+- Valid SKUs query uses 2 separate PBI DAX calls + Python join (D-24a). Not a single all-in-one DAX.
+- `consecutive_weeks_flagged` in `anomaly_history.csv` serves double duty: (1) sustained-shift detection, (2) backlog weight multiplier in priority score.
+- Validated data (2026-05-28): ~484 valid SKUs after triple filter, 188 with positive overcharge and velocity > 0, top impact $375/4wk (US-OHFB-3VH-1511L-GYOW).
 
 </specifics>
 
