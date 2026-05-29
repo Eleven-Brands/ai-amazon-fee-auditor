@@ -59,7 +59,27 @@
   3. The ClickUp comment includes a human-in-the-loop escalation prompt asking whether to open an investigation task for the top flagged SKUs
   4. Changing `OUT-03` config (ClickUp task ID, notification recipients) requires only a config file edit — no code changes
   5. A SKU that has flagged in the same direction for N consecutive weeks is classified as "sustained shift" and does not re-alert as a new anomaly
-**Plans**: TBD
+**Plans**: 4 plans in 4 waves
+
+**Wave 0**
+- [ ] 02-01-PLAN.md — Infrastructure scaffold: test_detection.py (11 RED tests), conftest.py additions, snapshots/.gitkeep, audit_config.json, .gitignore + requirements.txt updates
+
+**Wave 1** *(blocked on Wave 0 completion)*
+- [ ] 02-02-PLAN.md — Data layer: run_audit.py with load_config(), DAX builders, snapshot I/O, rolling 8-week median baseline; 3 DETECT-02 tests green
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 02-03-PLAN.md — Detection layer: detect_anomalies(), AnomalyRow, load_prior_counts(), classify_sustained_shifts(), append_to_history(), validate_anomaly_df(); all DETECT-02 + DETECT-03 tests green
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 02-04-PLAN.md — Output layer + main() orchestration: build_anomaly_json(), generate_narrative(), post_clickup_comment(), attach_csv_to_task(), full 8-stage main(); all 11 tests green; human verify live ClickUp post
+
+**Cross-cutting constraints:**
+- D-22: run_audit.py imports from explore_fees.py — no code duplication
+- D-19: Claude receives anomaly JSON summary only — never raw rows
+- D-16: Escalation prompt literal: "Reply YES to this comment to open an investigation task for the top flagged SKUs."
+- ClickUp auth: Authorization: {pk_...} header — NO "Bearer" prefix (401 if wrong)
+- Rolling baseline: MUST use shift(1) to exclude current week from its own baseline
+- Consecutive count: MUST include ±1 day continuity check
 
 ### Phase 3: Scheduling + Operationalization
 **Goal**: The audit runs automatically every week via Windows Task Scheduler and can be triggered on demand via CLI, with no manual intervention required under normal conditions
@@ -79,7 +99,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Data Foundation | 4/4 | Complete | 01-01: 2026-05-27, 01-02: 2026-05-27, 01-03: 2026-05-27, 01-04: 2026-05-27 |
-| 2. Detection + Output Pipeline | 0/? | Not started | - |
+| 2. Detection + Output Pipeline | 0/4 | Planned | - |
 | 3. Scheduling + Operationalization | 0/? | Not started | - |
 
 ---
@@ -105,4 +125,4 @@
 ---
 
 *Roadmap created: 2026-05-27*
-*Last updated: 2026-05-27 — Phase 1 complete (4/4 plans). Plan 01-04: main() entrypoint wired, live run verified (5,274 rows, output/explore_fees_20260527.csv written). Critical discovery: fact_fee_preview is a fee schedule history table — Phase 2 baseline strategy must use snapshot accumulation or marketplace-batched queries.*
+*Last updated: 2026-05-28 — Phase 2 planned (4 plans, 4 waves). Wave 0: test scaffold + infra. Wave 1: data layer + baseline. Wave 2: detection + sustained-shift. Wave 3: output layer + live ClickUp post.*

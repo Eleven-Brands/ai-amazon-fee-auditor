@@ -1,3 +1,9 @@
+## Standing Instructions
+
+- **SEMPRE usar a skill `/dashboard-guide`** para qualquer pergunta sobre dashboards, modelos Power BI, tabelas, colunas, medidas DAX ou estrutura de dados da OrganiHaus. Nunca ler os arquivos de referência diretamente via PowerShell ou Bash — usar o skill.
+
+---
+
 <!-- GSD:project-start source:PROJECT.md -->
 
 ## Project
